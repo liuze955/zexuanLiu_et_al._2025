@@ -140,7 +140,7 @@ stopImplicitCluster()
 capture.output(cvfit, file = "glmnet.cvfit.csv")
 
 #predict
-pred_result = predict(cvfit, newx=as.matrix(train[,-1]), type="class", s="lambda.1se")
+pred_result = predict(cvfit, newx=as.matrix(test[,-1]), type="class", s="lambda.1se")
 write.table(pred_result,"pred_result.txt",quote=F,row.names=F)
 
 save.image("lasso.Rdata")
