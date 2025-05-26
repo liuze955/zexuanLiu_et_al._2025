@@ -133,3 +133,77 @@ a=p2[-log10(p2[,i]) > -log10(0.05/nrow(p2)) ,]
 write.table(a[,c("chr","pos")],name,quote=F,row.names=F,col.names=F)
 }
 ```
+
+## LFMM of 90% random samples
+```R
+library(lfmm)
+library(data.table)
+library(qqman)
+
+load("lfmm.Rdata")
+
+#cv 10x
+n = nrow(geno_data)
+set.seed(123)
+shuffled_indices = sample(1:n) 
+folds <- cut(shuffled_indices, breaks = 10, labels = FALSE)
+
+for (i in 1:10) {
+	test_index = which(folds == i)
+	train_index = which(folds != i)
+
+	env_data_test = env_data[test_index,c(1,4)]
+	geno_data_test = geno_data[test_index,]
+
+	mod.lfmm = lfmm_ridge(Y = geno_data_test,X = env_data_test,K = 3)
+	test.lfmm = lfmm_test(Y = geno_data_test,X = env_data_test,lfmm = mod.lfmm,calibrate = "gif")
+
+	p=test.lfmm$calibrated.pvalue
+	p=as.data.frame(p)
+	p$snp=row.names(p)
+	
+	p$chr=sapply(strsplit(p$snp, "_"), function(x) x[1])
+	p$chr[p$chr == "X"] = 27
+	p$pos=sapply(strsplit(p$snp, "_"), function(x) x[2])
+	p$pos=as.numeric(p$pos)
+	p$chr=as.numeric(p$chr)
+	p$id=1:nrow(p)
+	
+
+	p2=p
+	cat("Number of NA values before replacement:", sum(is.na(p2)), "\n")
+	p2[is.na(p2)]=1
+	p2[p2==0]=1
+
+	name_outP = paste0("lfmm.p.folds",i)
+        fwrite(p2,name_outP,quote=F,row.names=F)
+
+	#lambda
+	chi_squared1 <- qchisq(1 - p2$bio7, 1)
+	chi_squared2 <- qchisq(1 - p2$bio14, 1)
+	lambda1 <- median(chi_squared1) / qchisq(0.5, 1)
+	lambda2 <- median(chi_squared2) / qchisq(0.5, 1)
+	cat("lambda_bio7",lambda1)
+	cat("lambda_bio14",lambda2)
+
+	for (bio in c("bio7","bio14")) {
+		#top sites
+		name_outTop = paste0("top_",bio,"_folds",i)
+		a=p2[-log10(p2[,bio]) > -log10(0.05/nrow(p2)) ,]
+		write.table(a[,c("chr","pos")],name_outTop,quote=F,row.names=F,col.names=F)
+		#draw
+		png_name1 = paste0("manhan.",bio,"folds",i,".png")
+		png_name2 = paste0("qq.",bio,"folds",i,".png")
+		png(png_name1,width = 2000, height = 1000, units = 'px',res=200)
+		manhattan(p2 ,chr="chr", logp = T,
+          			ylab="-logp",cex = 0.8, cex.axis = 0.8, suggestiveline=-log10(0.05/nrow(p2)),genomewideline=F,
+          			bp="pos", p=bio ,snp = "snp" )
+		dev.off()
+
+		png(png_name2,width = 1000, height = 1000, units = 'px',res=200)
+		qq(p2[,bio])
+		dev.off()
+	}
+
+}
+```

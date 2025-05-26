@@ -93,3 +93,55 @@ anova(m_logistic5,m_0)
 anova(m_logistic6,m_0)
 ```
 
+## lasso
+```R
+library(plinkFile)
+library(glmnet)
+library(dplyr)
+library(glmnet)
+library(doParallel)
+options(max.print=4000000)
+
+file_geno="ld02"
+
+geno = readBED(file_geno)
+pop = read.table("ind.group.txt",header=F)
+colnames(pop) = c("ind","pop","class")
+geno = geno[rownames(geno) %in% pop$ind,]
+
+pop_order = pop[match(rownames(geno),pop$ind),]
+
+df = cbind(pop_order$class,geno)
+df = data.frame(df)
+colnames(df) = paste0("a",1:ncol(df))
+colnames(df)[1]  ="phe"
+
+#sample
+idx = which(df$phe == 4)
+
+train = df[-idx,]
+test = df[idx,]
+
+train$phe = as.factor(train$phe)
+test$phe = as.factor(test$phe)
+
+#lasso model
+fit = glmnet(train[,-1], train$phe, family="multinomial", nlambda=50, alpha=1)
+capture.output(fit, file = "glmnet.fit.csv")
+
+png('fit.png',width = 2000, height = 1000, units = 'px',res=200)
+plot(fit, xvar="lambda", label=TRUE)
+dev.off()
+
+set.seed(123)
+registerDoParallel(cores=5)
+cvfit = cv.glmnet(as.matrix(train[,-1]),train$phe,family="multinomial",type.measure = "class",nfolds=9,parallel=TRUE)
+stopImplicitCluster()
+capture.output(cvfit, file = "glmnet.cvfit.csv")
+
+#predict
+pred_result = predict(cvfit, newx=as.matrix(train[,-1]), type="class", s="lambda.1se")
+write.table(pred_result,"pred_result.txt",quote=F,row.names=F)
+
+save.image("lasso.Rdata")
+```
